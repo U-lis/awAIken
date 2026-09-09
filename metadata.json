@@ -1,6 +1,6 @@
 {
   "uuid": "lid-awake@ulismoon.local",
-  "name": "Lid Awake",
+  "name": "awAIken",
   "description": "상단바에서 절전을 켜고 끕니다. 켜면 덮개를 닫아도, 오래 방치해도 시스템이 잠들지 않습니다. 끄면 시스템 기본 동작으로 되돌아갑니다.",
   "shell-version": ["50"],
   "session-modes": ["user", "unlock-dialog"],

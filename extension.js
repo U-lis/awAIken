@@ -54,7 +54,7 @@ const ICON_OFF = 'weather-clear-night-symbolic';
 const Indicator = GObject.registerClass(
 class LidAwakeIndicator extends PanelMenu.Button {
     _init(ext) {
-        super._init(0.5, 'Lid Awake');
+        super._init(0.5, 'awAIken');
         this._ext = ext;
 
         this._icon = new St.Icon({
@@ -314,10 +314,10 @@ export default class LidAwakeExtension extends Extension {
             return;
         const status = this._spawn([
             'systemd-run', '--user', '--collect', `--unit=${UNIT}`,
-            '--description=Lid Awake: 덮개 닫힘·유휴 절전 차단',
+            '--description=awAIken: 덮개 닫힘·유휴 절전 차단',
             'systemd-inhibit',
             `--what=${INHIBIT_WHAT}`,
-            '--who=Lid Awake',
+            '--who=awAIken',
             '--why=사용자가 깨어 있기를 켰음',
             '--mode=block',
             'sleep', 'infinity',

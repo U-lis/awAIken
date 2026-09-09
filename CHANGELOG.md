@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Renamed the project from **wAIk-up** to **awAIken**, in the README and in
+  every user-visible string: the extension name in the Extensions app, the
+  panel button's accessible name, and the `--description` / `--who` fields the
+  inhibitor unit shows in `systemd-inhibit --list`. The UUID
+  (`lid-awake@ulismoon.local`), the GSettings schema id and the unit name stay
+  `lid-awake` so existing installs keep their dconf state.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added

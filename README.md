@@ -1,8 +1,8 @@
-# wAIk-up
+# awAIken
 
 ![GNOME Shell 50](https://img.shields.io/badge/GNOME%20Shell-50-4A86CF)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
-![Version: 0.1.0](https://img.shields.io/badge/version-0.1.0-blue)
+![Version: 0.2.0](https://img.shields.io/badge/version-0.2.0-blue)
 
 Keep your laptop awake while AI agents are working.
 
@@ -16,7 +16,7 @@ Turn it back off and the system returns to its normal power behaviour.
 ## Install
 
 ```sh
-git clone https://github.com/U-lis/wAIk-up.git \
+git clone https://github.com/U-lis/awAIken.git \
     ~/.local/share/gnome-shell/extensions/lid-awake@ulismoon.local
 glib-compile-schemas \
     ~/.local/share/gnome-shell/extensions/lid-awake@ulismoon.local/schemas/

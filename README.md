@@ -68,6 +68,7 @@ Click the sun icon in the top bar:
 | **깨어 있기** (Stay awake) | Master toggle. Blocks lid-close and idle suspend. |
 | **덮으면 화면 끄기** (Blank on lid close) | Turns the screen off when the lid closes, without suspending. On by default. |
 | **화면도 끄지 않기** (Keep screen on) | Never blanks the screen. Overrides the option above. |
+| **덮으면 잠그기** (Lock on lid close) | Locks the session as it blanks, so reopening the lid asks for the password. On by default. Turn it off to get the old behaviour, where reopening returns straight to the desktop. |
 | **로그인 시 상태 유지** (Restore on login) | Re-enables the toggle after login. Off by default. |
 | **단축키 설정…** (Shortcut settings) | Opens the preferences window described below. |
 

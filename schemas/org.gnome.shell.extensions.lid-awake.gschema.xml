@@ -18,6 +18,10 @@
       <default>true</default>
       <summary>덮개를 닫으면 화면만 끔</summary>
     </key>
+    <key name="lock-on-lid-close" type="b">
+      <default>true</default>
+      <summary>덮개를 닫으면 화면을 끄면서 잠금</summary>
+    </key>
     <key name="restore-state" type="b">
       <default>false</default>
       <summary>로그인 시 이전 상태 복원</summary>

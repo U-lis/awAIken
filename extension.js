@@ -87,6 +87,12 @@ class LidAwakeIndicator extends PanelMenu.Button {
             ext.settings.set_boolean('blank-on-lid-close', state));
         this.menu.addMenuItem(this._blankItem);
 
+        this._lockItem = new PopupMenu.PopupSwitchMenuItem(
+            '덮으면 잠그기', ext.settings.get_boolean('lock-on-lid-close'));
+        this._lockItem.connect('toggled', (_item, state) =>
+            ext.settings.set_boolean('lock-on-lid-close', state));
+        this.menu.addMenuItem(this._lockItem);
+
         const restoreItem = new PopupMenu.PopupSwitchMenuItem(
             '로그인 시 상태 유지', ext.settings.get_boolean('restore-state'));
         restoreItem.connect('toggled', (_item, state) =>
@@ -119,6 +125,7 @@ class LidAwakeIndicator extends PanelMenu.Button {
         // 왜 안 되는지 상태줄에 적힌 편이 낫다.
         this._toggle.setSensitive(deps.systemd);
         this._blankItem.setSensitive(deps.upower);
+        this._lockItem.setSensitive(deps.upower);
 
         this._icon.icon_name = active ? ICON_ON : ICON_OFF;
         // 활성 시 강조
@@ -145,6 +152,7 @@ export default class LidAwakeExtension extends Extension {
             upower: false,
         };
 
+        this._lockedByLid = false;
         this._watchLid();
         this._deps.upower = Boolean(this._upower);
 
@@ -377,21 +385,39 @@ export default class LidAwakeExtension extends Extension {
         if (this.settings.get_boolean('keep-screen-on'))
             return;
 
-        // 열 때는 꺼 준다. 덮개 열림 자체는 입력 이벤트가 아니라서
-        // 이걸 안 하면 키를 누를 때까지 화면이 검은 채로 남는다.
-        this._setScreensaver(closed);
+        if (!closed) {
+            // 잠갔다면 그대로 둔다. SetActive(false) 는 인증 없이 화면을
+            // 여는 길이라 잠금의 의미가 사라진다. 사용자가 키를 누르면
+            // 셸이 알아서 잠금 해제 창을 띄운다.
+            if (!this._lockedByLid)
+                this._setScreensaver(false);
+            this._lockedByLid = false;
+            return;
+        }
+
+        // 잠금은 Lock() 으로만 걸린다. SetActive(true) 는 화면만 가리고
+        // 잠금 플래그를 세우지 않아서, 다시 열면 열려 있던 창이 그대로 보인다.
+        if (this.settings.get_boolean('lock-on-lid-close')) {
+            this._lockedByLid = true;
+            this._callScreensaver('Lock', null);
+        } else {
+            this._setScreensaver(true);
+        }
     }
 
     _setScreensaver(active) {
+        this._callScreensaver('SetActive', new GLib.Variant('(b)', [active]));
+    }
+
+    _callScreensaver(method, args) {
         Gio.DBus.session.call(
-            SCREENSAVER.name, SCREENSAVER.path, SCREENSAVER.iface, 'SetActive',
-            new GLib.Variant('(b)', [active]), null,
-            Gio.DBusCallFlags.NONE, -1, null,
+            SCREENSAVER.name, SCREENSAVER.path, SCREENSAVER.iface, method,
+            args, null, Gio.DBusCallFlags.NONE, -1, null,
             (bus, res) => {
                 try {
                     bus.call_finish(res);
                 } catch (e) {
-                    logError(e, 'lid-awake: 스크린세이버 전환 실패');
+                    logError(e, `lid-awake: 스크린세이버 ${method} 실패`);
                 }
             });
     }

@@ -5,6 +5,6 @@
   "shell-version": ["50"],
   "session-modes": ["user", "unlock-dialog"],
   "settings-schema": "org.gnome.shell.extensions.lid-awake",
-  "version": 1,
-  "version-name": "0.1.0"
+  "version": 2,
+  "version-name": "0.2.0"
 }

@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Low-battery suspend** (20 % by default): while the toggle is on and the
+  battery is discharging, dropping below the threshold turns the toggle off
+  and suspends via `org.freedesktop.login1.Manager.Suspend`, instead of
+  running until the battery dies. The threshold is a slider in the
+  preferences window that snaps to 0 / 5 / 10 / 15 / 20 / 30 / 50 %; `0`
+  disables it. Stored in the new `low-battery-threshold` key.
+
 ### Changed
+
+- The menu item **단축키 설정…** is now **설정…**, since the preferences
+  window holds more than the shortcut.
+
+### Removed
+
+- **Restore on login** option and its `restore-state` key. The toggle now
+  always starts off after login; a toggle left on and forgotten no longer
+  carries over. A gnome-shell crash still keeps the toggle on, since the
+  inhibitor unit survives it.
+- **Keep screen on** option and its `keep-screen-on` key. The screen now
+  turns off when the lid closes, and follows GNOME's own
+  `idle-delay` while it is open; the extension no longer overwrites
+  `idle-delay`. A backup taken before this change still restores it.
+- **Blank on lid close** option and its `blank-on-lid-close` key. Closing the
+  lid while the toggle is on now always turns the screen off (and locks it if
+  **Lock on lid close** is on), as the default already did.
 
 - Renamed the project from **wAIk-up** to **awAIken**, in the README and in
   every user-visible string: the extension name in the Extensions app, the

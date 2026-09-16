@@ -10,21 +10,14 @@
       <default><![CDATA[['<Super><Shift>l']]]></default>
       <summary>깨어 있기 토글 단축키</summary>
     </key>
-    <key name="keep-screen-on" type="b">
-      <default>false</default>
-      <summary>활성 시 화면도 끄지 않음</summary>
-    </key>
-    <key name="blank-on-lid-close" type="b">
-      <default>true</default>
-      <summary>덮개를 닫으면 화면만 끔</summary>
-    </key>
     <key name="lock-on-lid-close" type="b">
       <default>true</default>
       <summary>덮개를 닫으면 화면을 끄면서 잠금</summary>
     </key>
-    <key name="restore-state" type="b">
-      <default>false</default>
-      <summary>로그인 시 이전 상태 복원</summary>
+    <key name="low-battery-threshold" type="i">
+      <default>20</default>
+      <range min="0" max="50"/>
+      <summary>깨어 있기 중 배터리가 이 비율(%) 미만이면 강제 절전, 0 이면 사용 안 함</summary>
     </key>
     <key name="saved-state" type="s">
       <default>'{}'</default>

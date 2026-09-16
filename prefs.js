@@ -7,6 +7,7 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const SHORTCUT_KEY = 'toggle-shortcut';
+const BATTERY_KEY = 'low-battery-threshold';
 const HINT = '눌러서 새 조합을 지정, Backspace 로 해제';
 
 // 충돌을 훑어볼 스키마. 여기 없는 곳(앱 자체 단축키 등)의 충돌은 잡지 못한다.
@@ -190,14 +191,82 @@ function isValidAccel(mask, keyval) {
            (keyval === Gdk.KEY_Tab && mask !== 0);
 }
 
+// 슬라이더는 이 값들 사이에서만 멈춘다. 0 은 끔.
+const BATTERY_STEPS = [0, 5, 10, 15, 20, 30, 50];
+
+// 간격이 고르지 않아 스케일은 값이 아니라 목록 인덱스를 움직인다.
+const BatteryRow = GObject.registerClass(
+class LidAwakeBatteryRow extends Adw.ActionRow {
+    _init(settings) {
+        super._init({title: '저전력 강제 절전'});
+        this._settings = settings;
+
+        this._scale = new Gtk.Scale({
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: BATTERY_STEPS.length - 1,
+                step_increment: 1,
+                page_increment: 1,
+            }),
+            round_digits: 0,
+            draw_value: false,
+            hexpand: true,
+            valign: Gtk.Align.CENTER,
+            width_request: 280,
+        });
+        BATTERY_STEPS.forEach((value, i) => this._scale.add_mark(
+            i, Gtk.PositionType.BOTTOM, value === 0 ? '끔' : `${value}%`));
+        this.add_suffix(this._scale);
+
+        this._scale.connect('value-changed', () => {
+            // _sync 가 칸을 맞춘 것뿐이면 저장하지 않는다. 안 그러면 목록에 없는
+            // 값이 설정창을 여는 것만으로 가까운 칸 값으로 바뀐다.
+            if (this._syncing)
+                return;
+            const value = BATTERY_STEPS[Math.round(this._scale.get_value())];
+            if (value !== settings.get_int(BATTERY_KEY))
+                settings.set_int(BATTERY_KEY, value);
+        });
+
+        this._changedId = settings.connect(
+            `changed::${BATTERY_KEY}`, () => this._sync());
+        this.connect('destroy', () => settings.disconnect(this._changedId));
+        this._sync();
+    }
+
+    _sync() {
+        const value = this._settings.get_int(BATTERY_KEY);
+        // gsettings 로 목록에 없는 값(예: 25)을 넣었을 수 있으니 가장 가까운 칸에 둔다.
+        let index = 0;
+        BATTERY_STEPS.forEach((step, i) => {
+            if (Math.abs(step - value) < Math.abs(BATTERY_STEPS[index] - value))
+                index = i;
+        });
+        this._syncing = true;
+        this._scale.set_value(index);
+        this._syncing = false;
+
+        this.subtitle = value > 0
+            ? `깨어 있기 중 배터리가 ${value}% 미만으로 방전되면 끄고 절전`
+            : '사용 안 함 — 배터리가 다 되면 그대로 꺼짐';
+    }
+});
+
 export default class LidAwakePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
 
         const page = new Adw.PreferencesPage({
-            title: '단축키',
-            icon_name: 'preferences-desktop-keyboard-shortcuts-symbolic',
+            title: '설정',
+            icon_name: 'preferences-system-symbolic',
         });
+
+        const batteryGroup = new Adw.PreferencesGroup({
+            title: '배터리',
+            description: '충전 중에는 동작하지 않습니다. 절전 후 깨어 있기는 꺼진 채로 돌아옵니다.',
+        });
+        batteryGroup.add(new BatteryRow(settings));
+        page.add(batteryGroup);
 
         const group = new Adw.PreferencesGroup({
             title: '단축키',

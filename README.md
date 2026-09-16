@@ -65,12 +65,35 @@ Click the sun icon in the top bar:
 
 | Menu item | What it does |
 | --- | --- |
-| **깨어 있기** (Stay awake) | Master toggle. Blocks lid-close and idle suspend. |
-| **덮으면 화면 끄기** (Blank on lid close) | Turns the screen off when the lid closes, without suspending. On by default. |
-| **화면도 끄지 않기** (Keep screen on) | Never blanks the screen. Overrides the option above. |
-| **덮으면 잠그기** (Lock on lid close) | Locks the session as it blanks, so reopening the lid asks for the password. On by default. Turn it off to get the old behaviour, where reopening returns straight to the desktop. |
-| **로그인 시 상태 유지** (Restore on login) | Re-enables the toggle after login. Off by default. |
-| **단축키 설정…** (Shortcut settings) | Opens the preferences window described below. |
+| **깨어 있기** (Stay awake) | Master toggle. Blocks lid-close and idle suspend. Closing the lid still turns the screen off. |
+| **덮으면 잠그기** (Lock on lid close) | Locks the session as the lid-close blanks the screen, so reopening the lid asks for the password. On by default. Turn it off to get the old behaviour, where reopening returns straight to the desktop. |
+| **설정…** (Settings) | Opens the preferences window: low-battery suspend and the keyboard shortcut, described below. |
+
+### Low-battery suspend
+
+Leaving the toggle on and forgetting about it used to mean running the battery
+flat until the machine powered off. While the toggle is on and the battery is
+discharging, the extension now watches UPower's display device and, once the
+charge drops below a threshold, turns the toggle off and suspends through
+logind.
+
+The threshold is set with a slider in **설정…** and snaps to 0, 5, 10, 15,
+20, 30 or 50 %; the default is 20 %. `0` (끔) disables it, so the battery
+runs out as before.
+
+- It only fires on a battery change (percentage or charge state), not the
+  moment you turn the toggle on, so enabling it below the threshold does not
+  suspend immediately — it suspends on the next drop.
+- Nothing happens while charging, or on machines without a battery.
+- The inhibitor is released *before* suspending. Suspending over a held
+  block inhibitor needs `org.freedesktop.login1.suspend-ignore-inhibit`,
+  which defaults to admin authentication; a plain `suspend` is allowed for
+  the active session. After resume the toggle stays off and a notification
+  says why.
+
+```sh
+gsettings set org.gnome.shell.extensions.lid-awake low-battery-threshold 10
+```
 
 ### Keyboard shortcut
 
@@ -79,7 +102,7 @@ default. The shortcut flips the *actual* inhibitor unit state, not the stored
 setting, so it stays correct even if the unit was stopped from the command
 line. An OSD shows the resulting state.
 
-To change it, open **단축키 설정…** from the menu (or the gear icon in the
+To change it, open **설정…** from the menu (or the gear icon in the
 Extensions app), click the row, and press the new combination. `Backspace`
 clears the shortcut, `Esc` cancels. The row warns if the combination is already
 taken by the window manager, the shell, mutter, gsd-media-keys, or a user-defined

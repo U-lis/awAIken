@@ -45,6 +45,26 @@ const SCREENSAVER = {
     iface: 'org.gnome.ScreenSaver',
 };
 
+// 배터리는 개별 장치가 아니라 셸 배터리 아이콘과 같은 합산 장치에서 읽는다.
+const BATTERY = {
+    name: 'org.freedesktop.UPower',
+    path: '/org/freedesktop/UPower/devices/DisplayDevice',
+    iface: 'org.freedesktop.UPower.Device',
+};
+
+// org.freedesktop.UPower.Device 의 Type / State 열거값
+const DEVICE_TYPE_BATTERY = 2;
+const DEVICE_STATE_DISCHARGING = 2;
+
+const LOGIN1 = {
+    name: 'org.freedesktop.login1',
+    path: '/org/freedesktop/login1',
+    iface: 'org.freedesktop.login1.Manager',
+};
+
+// 이 비율(%) 미만으로 방전되면 강제 절전. 0 이면 끔.
+const BATTERY_KEY = 'low-battery-threshold';
+
 // 토글 단축키를 담은 설정 키. Main.wm.addKeybinding 이 키 이름으로 찾아간다.
 const SHORTCUT_KEY = 'toggle-shortcut';
 
@@ -75,35 +95,17 @@ class LidAwakeIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const screenItem = new PopupMenu.PopupSwitchMenuItem(
-            '화면도 끄지 않기', ext.settings.get_boolean('keep-screen-on'));
-        screenItem.connect('toggled', (_item, state) =>
-            ext.settings.set_boolean('keep-screen-on', state));
-        this.menu.addMenuItem(screenItem);
-
-        this._blankItem = new PopupMenu.PopupSwitchMenuItem(
-            '덮으면 화면 끄기', ext.settings.get_boolean('blank-on-lid-close'));
-        this._blankItem.connect('toggled', (_item, state) =>
-            ext.settings.set_boolean('blank-on-lid-close', state));
-        this.menu.addMenuItem(this._blankItem);
-
         this._lockItem = new PopupMenu.PopupSwitchMenuItem(
             '덮으면 잠그기', ext.settings.get_boolean('lock-on-lid-close'));
         this._lockItem.connect('toggled', (_item, state) =>
             ext.settings.set_boolean('lock-on-lid-close', state));
         this.menu.addMenuItem(this._lockItem);
 
-        const restoreItem = new PopupMenu.PopupSwitchMenuItem(
-            '로그인 시 상태 유지', ext.settings.get_boolean('restore-state'));
-        restoreItem.connect('toggled', (_item, state) =>
-            ext.settings.set_boolean('restore-state', state));
-        this.menu.addMenuItem(restoreItem);
-
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const shortcutItem = new PopupMenu.PopupMenuItem('단축키 설정…');
-        shortcutItem.connect('activate', () => ext.openPreferences());
-        this.menu.addMenuItem(shortcutItem);
+        const settingsItem = new PopupMenu.PopupMenuItem('설정…');
+        settingsItem.connect('activate', () => ext.openPreferences());
+        this.menu.addMenuItem(settingsItem);
 
         const prefsItem = new PopupMenu.PopupMenuItem('시스템 전원 설정…');
         prefsItem.connect('activate', () => {
@@ -124,7 +126,6 @@ class LidAwakeIndicator extends PanelMenu.Button {
         // 못 하는 일은 스위치를 잠가 둔다. 눌러도 안 되는 토글보다
         // 왜 안 되는지 상태줄에 적힌 편이 낫다.
         this._toggle.setSensitive(deps.systemd);
-        this._blankItem.setSensitive(deps.upower);
         this._lockItem.setSensitive(deps.upower);
 
         this._icon.icon_name = active ? ICON_ON : ICON_OFF;
@@ -154,6 +155,7 @@ export default class LidAwakeExtension extends Extension {
 
         this._lockedByLid = false;
         this._watchLid();
+        this._watchBattery();
         this._deps.upower = Boolean(this._upower);
 
         this._indicator = new Indicator(this);
@@ -168,16 +170,10 @@ export default class LidAwakeExtension extends Extension {
             this.settings.set_boolean('active', true);
             this._writeOverrides();
         } else {
-            // 락이 없다 = 절전이 살아 있다. 남아 있는 백업이 있으면 원상 복구.
+            // 락이 없다 = 로그아웃 등으로 절전이 살아 있다. 남아 있는 백업이
+            // 있으면 원상 복구하고, 켜 둔 걸 잊은 채 다시 켜지지 않도록 꺼진 채 시작한다.
             this._restoreOriginals();
-
-            const wanted = this._deps.systemd &&
-                           this.settings.get_boolean('active') &&
-                           this.settings.get_boolean('restore-state');
-            if (wanted)
-                this._apply(true);
-            else
-                this.settings.set_boolean('active', false);
+            this.settings.set_boolean('active', false);
         }
 
         this._sync();
@@ -190,6 +186,7 @@ export default class LidAwakeExtension extends Extension {
 
         this._unbindShortcut();
         this._unwatchLid();
+        this._unwatchBattery();
 
         this._indicator?.destroy();
         this._indicator = null;
@@ -266,15 +263,13 @@ export default class LidAwakeExtension extends Extension {
     _writeOverrides() {
         for (const key of POWER_KEYS)
             this._power.set_string(key, 'nothing');
-        if (this.settings.get_boolean('keep-screen-on'))
-            this._session.set_uint('idle-delay', 0);
     }
 
     _saveOriginals() {
         // 이미 백업이 있으면 덮어쓰지 않는다(원본 유실 방지).
         if (this.settings.get_string('saved-state') !== '{}')
             return;
-        const saved = {power: {}, idleDelay: this._session.get_uint('idle-delay')};
+        const saved = {power: {}};
         for (const key of POWER_KEYS)
             saved.power[key] = this._power.get_string(key);
         this.settings.set_string('saved-state', JSON.stringify(saved));
@@ -288,6 +283,8 @@ export default class LidAwakeExtension extends Extension {
             const saved = JSON.parse(raw);
             for (const [key, value] of Object.entries(saved.power ?? {}))
                 this._power.set_string(key, value);
+            // '화면도 끄지 않기'를 없애기 전의 백업에만 들어 있다. 그 옵션을 켠 채
+            // 업데이트했다면 idle-delay 가 0 으로 남아 있으니 되돌려 준다.
             if (saved.idleDelay !== undefined)
                 this._session.set_uint('idle-delay', saved.idleDelay);
         } catch (e) {
@@ -379,11 +376,6 @@ export default class LidAwakeExtension extends Extension {
         // 확장이 꺼져 있으면 시스템 기본 동작(대개 서스펜드)에 맡긴다.
         if (!this.settings.get_boolean('active'))
             return;
-        if (!this.settings.get_boolean('blank-on-lid-close'))
-            return;
-        // '화면도 끄지 않기'가 켜져 있으면 그쪽 의사가 우선이다.
-        if (this.settings.get_boolean('keep-screen-on'))
-            return;
 
         if (!closed) {
             // 잠갔다면 그대로 둔다. SetActive(false) 는 인증 없이 화면을
@@ -422,6 +414,87 @@ export default class LidAwakeExtension extends Extension {
             });
     }
 
+    // ---- 배터리 감시: 깨어 있다가 방전돼 꺼지는 것 막기 ----
+    //
+    // 절전을 막아 둔 채 잊어버리면 배터리가 0 이 될 때까지 버티다 그냥 꺼진다.
+    // 설정한 비율 밑으로 방전되면 깨어 있기를 끄고 직접 절전시킨다.
+
+    _watchBattery() {
+        try {
+            this._battery = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
+                BATTERY.name, BATTERY.path, BATTERY.iface, null);
+        } catch (e) {
+            logError(e, 'lid-awake: UPower 배터리 연결 실패');
+            return;
+        }
+
+        // 켜는 순간이 아니라 잔량·충전 상태가 바뀔 때만 판단한다. 이미 문턱
+        // 아래에서 켰다고 곧바로 재워 버리면 토글이 고장 난 것처럼 보인다.
+        this._batteryId = this._battery.connect('g-properties-changed',
+            (_proxy, changed) => {
+                if (changed.lookup_value('Percentage', null) ||
+                    changed.lookup_value('State', null))
+                    this._checkBattery();
+            });
+    }
+
+    _unwatchBattery() {
+        if (this._batteryId)
+            this._battery?.disconnect(this._batteryId);
+        this._batteryId = null;
+        this._battery = null;
+    }
+
+    // 배터리가 없으면(데스크톱 등) null.
+    _batteryState() {
+        const prop = name =>
+            this._battery?.get_cached_property(name)?.deep_unpack();
+        if (prop('IsPresent') !== true || prop('Type') !== DEVICE_TYPE_BATTERY)
+            return null;
+        const percentage = prop('Percentage');
+        if (typeof percentage !== 'number')
+            return null;
+        return {
+            percentage,
+            discharging: prop('State') === DEVICE_STATE_DISCHARGING,
+        };
+    }
+
+    _checkBattery() {
+        if (!this.settings.get_boolean('active'))
+            return;
+        const threshold = this.settings.get_int(BATTERY_KEY);
+        if (threshold <= 0)
+            return;
+        const battery = this._batteryState();
+        if (!battery?.discharging || battery.percentage >= threshold)
+            return;
+        this._suspendForBattery(battery.percentage);
+    }
+
+    _suspendForBattery(percentage) {
+        // 락을 먼저 푼다. 락을 든 채 재우려면 inhibitor 를 무시하는 절전이 필요한데
+        // 그 polkit 권한(login1.suspend-ignore-inhibit)은 기본이 관리자 인증이다.
+        // 락이 없으면 일반 suspend 권한(활성 세션이면 허용)으로 충분하고,
+        // 깨어난 뒤에도 배터리가 모자라니 깨어 있기를 이어갈 이유가 없다.
+        this.setActive(false);
+        Main.notify('awAIken',
+            `배터리 ${Math.floor(percentage)}% — 깨어 있기를 끄고 절전합니다`);
+
+        Gio.DBus.system.call(
+            LOGIN1.name, LOGIN1.path, LOGIN1.iface, 'Suspend',
+            new GLib.Variant('(b)', [false]), null,
+            Gio.DBusCallFlags.NONE, -1, null,
+            (bus, res) => {
+                try {
+                    bus.call_finish(res);
+                } catch (e) {
+                    logError(e, 'lid-awake: 저전력 절전 실패');
+                }
+            });
+    }
+
     // 짧게 끝나는 systemd 명령이라 동기 실행해도 셸이 눈에 띄게 멈추지 않는다.
     _spawn(argv) {
         try {
@@ -448,8 +521,12 @@ export default class LidAwakeExtension extends Extension {
                 ? '덮개 닫힘·유휴 절전 차단됨'
                 : '차단 실패 — 로그 확인';
 
+        const threshold = this.settings.get_int(BATTERY_KEY);
+        if (active && threshold > 0 && this._batteryState())
+            detail += `\n배터리 ${threshold}% 미만이면 절전`;
+
         if (this._deps.systemd && !this._deps.upower)
-            detail += '\nUPower 없음 — 화면 끄기 불가';
+            detail += '\nUPower 없음 — 화면 끄기·저전력 절전 불가';
 
         this._indicator?.sync(active, detail, this._deps);
     }
